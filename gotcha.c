@@ -1,17 +1,19 @@
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
+#include <stddef.h>
 int count=0;
 int total=0;
 void expect(const char *info, const char *expr)
 {
     printf("..%s\n   but '%s' is false.\n",info,expr);
+    fflush(stdout);
     count++;
 }
 #define EXPECT(INFO,EXPR) if (total++,!(EXPR)) expect(INFO,#EXPR)
 
 /* stack check..How can I do this better? */
-int check_grow(int k, int *p)
+ptrdiff_t check_grow(int k, int *p)
 {
     if (p==0) p=&k;
     if (k==0) return &k-p;
@@ -23,6 +25,14 @@ int bits_per_int=BITS_PER_INT;
 int int_max=INT_MAX;
 int int_min=INT_MIN;
 
+/* for 21 - left to right */
+int ltr_result=0;
+unsigned ltr_fun(int k)
+{
+    ltr_result=ltr_result*10+k;
+    return 1;
+}
+
 int main()
 {
     printf("We like to think that:\n");
@@ -32,20 +42,22 @@ int main()
     EXPECT("02 big letters come before small letters",('A'<'a'));
     EXPECT("03 a char is 8 bits",CHAR_BIT==8);
     EXPECT("04 a char is signed",CHAR_MIN==SCHAR_MIN);
-	
+
     /* integers */
     EXPECT("05 int has the size of pointers",sizeof(int)==sizeof(void*));
+    /* not true for Windows-64 */
+    EXPECT("05a long has at least the size of pointers",sizeof(long)>=sizeof(void*));
 
     EXPECT("06 integers are 2-complement and wrap around",(int_max+1)==(int_min));
     EXPECT("07 integers are 2-complement and *always* wrap around",(INT_MAX+1)==(INT_MIN));
     EXPECT("08 overshifting is okay",(1<<bits_per_int)==0);
     EXPECT("09 overshifting is *always* okay",(1<<BITS_PER_INT)==0);
     {
-        int t=-1;
-        EXPECT("09a minus shifts backwards",(15<<t)==7);
+        int t;
+        EXPECT("09a minus shifts backwards",(t=-1,(15<<t)==7));
     }
     /* pointers */
-	/* Suggested by jalf */
+    /* Suggested by jalf */
     EXPECT("10 void* can store function pointers",sizeof(void*)>=sizeof(void(*)()));
     /* execution */
     EXPECT("11 Detecting how the stack grows is easy",check_grow(5,0)!=0);
@@ -53,16 +65,16 @@ int main()
 
     {
         int t;
+        /* suggested by jk */
         EXPECT("13 The smallest bits come always first",(t=0x1234,0x34==*(char*)&t));
     }
     {
-		/* Suggested by S.Lott */
+        /* Suggested by S.Lott */
         int a[2]={0,0};
         int i=0;
         EXPECT("14 i++ is structly left to right",(i=0,a[i++]=i,a[0]==1));
     }
     {
-        /* this could also be "everything's aligned to sizeof" instead */
         struct {
             char c;
             int i;
@@ -73,15 +85,41 @@ int main()
         EXPECT("16 malloc()=NULL means out of memory",(malloc(0)!=NULL));
     }
 
-	/* suggested by David Thornley */
-    EXPECT("17 size_t == unsigned int",sizeof(size_t)==sizeof(unsigned int));
+    /* suggested by David Thornley */
+    EXPECT("17 size_t is unsigned int",sizeof(size_t)==sizeof(unsigned int));
     /* this is true for C99, but not for C90. */
     EXPECT("18 a%b has the same sign as a",((-10%3)==-1) && ((10%-3)==1));
+
+    /* suggested by nos */
+    EXPECT("19-1 char<short",sizeof(char)<sizeof(short));
+    EXPECT("19-2 short<int",sizeof(short)<sizeof(int));
+    EXPECT("19-3 int<long",sizeof(int)<sizeof(long));
+    EXPECT("20 ptrdiff_t and size_t have the same size",(sizeof(ptrdiff_t)==sizeof(size_t)));
+#if 0
+    {
+        /* suggested by R. */
+        /* this crashed on TC 3.0++, compact. */
+        char buf[10];
+        EXPECT("21 You can use snprintf to append a string",
+               (snprintf(buf,10,"OK"),snprintf(buf,10,"%s!!",buf),strcmp(buf,"OK!!")==0));
+    }
+#endif
+
+    EXPECT("21 Evaluation is left to right",
+           (ltr_fun(1)*ltr_fun(2)*ltr_fun(3)*ltr_fun(4),ltr_result==1234));
+		   
+	{
+	#ifdef __STDC_IEC_559__
+	int STDC_IEC_559_is_defined=1;
+	#else 
+	/* This either means, there is no FP support
+	 *or* the compiler is not C99 enough to define  __STDC_IEC_559__
+	 *or* the FP support is not IEEE compliant. */
+	int STDC_IEC_559_is_defined=0;
+	#endif
+    EXPECT("22 floating point is always IEEE",STDC_IEC_559_is_defined);
+	}
 	
-	EXPECT("19-1 char<short",sizeof(char)<sizeof(short));
-	EXPECT("19-2 short<int",sizeof(short)<sizeof(int));
-	EXPECT("19-3 int<long",sizeof(int)<sizeof(long));
-    
     printf("From what I can say with my puny test cases, you are %d%% mainstream\n",100-(100*count)/total);
     return 0;
 }
