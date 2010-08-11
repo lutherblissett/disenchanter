@@ -10,7 +10,7 @@ void expect(const char *info, const char *expr)
 }
 #define EXPECT(INFO,EXPR) if (total++,!(EXPR)) expect(INFO,#EXPR)
 
-// stack check..How can I do this better?
+/* stack check..How can I do this better? */
 int check_grow(int k, int *p)
 {
     if (p==0) p=&k;
@@ -32,8 +32,10 @@ int main()
     EXPECT("02 big letters come before small letters",('A'<'a'));
     EXPECT("03 a char is 8 bits",CHAR_BIT==8);
     EXPECT("04 a char is signed",CHAR_MIN==SCHAR_MIN);
+	
     /* integers */
     EXPECT("05 int has the size of pointers",sizeof(int)==sizeof(void*));
+
     EXPECT("06 integers are 2-complement and wrap around",(int_max+1)==(int_min));
     EXPECT("07 integers are 2-complement and *always* wrap around",(INT_MAX+1)==(INT_MIN));
     EXPECT("08 overshifting is okay",(1<<bits_per_int)==0);
@@ -43,9 +45,10 @@ int main()
         EXPECT("09a minus shifts backwards",(15<<t)==7);
     }
     /* pointers */
+	/* Suggested by jalf */
     EXPECT("10 void* can store function pointers",sizeof(void*)>=sizeof(void(*)()));
     /* execution */
-    EXPECT("11 Detecting how the stack is easy",check_grow(5,0)!=0);
+    EXPECT("11 Detecting how the stack grows is easy",check_grow(5,0)!=0);
     EXPECT("12 the stack grows downwards",check_grow(5,0)<0);
 
     {
@@ -53,12 +56,13 @@ int main()
         EXPECT("13 The smallest bits come always first",(t=0x1234,0x34==*(char*)&t));
     }
     {
+		/* Suggested by S.Lott */
         int a[2]={0,0};
         int i=0;
-        EXPECT("14 i++ is left to right",(i=0,a[i++]=i,a[0]==1));
+        EXPECT("14 i++ is structly left to right",(i=0,a[i++]=i,a[0]==1));
     }
     {
-        // this could also be "everything's aligned to sizeof" instead
+        /* this could also be "everything's aligned to sizeof" instead */
         struct {
             char c;
             int i;
@@ -69,9 +73,15 @@ int main()
         EXPECT("16 malloc()=NULL means out of memory",(malloc(0)!=NULL));
     }
 
+	/* suggested by David Thornley */
     EXPECT("17 size_t == unsigned int",sizeof(size_t)==sizeof(unsigned int));
+    /* this is true for C99, but not for C90. */
     EXPECT("18 a%b has the same sign as a",((-10%3)==-1) && ((10%-3)==1));
-
+	
+	EXPECT("19-1 char<short",sizeof(char)<sizeof(short));
+	EXPECT("19-2 short<int",sizeof(short)<sizeof(int));
+	EXPECT("19-3 int<long",sizeof(int)<sizeof(long));
+    
     printf("From what I can say with my puny test cases, you are %d%% mainstream\n",100-(100*count)/total);
     return 0;
 }
