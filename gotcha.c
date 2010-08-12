@@ -152,11 +152,12 @@ int main()
                (snprintf(buf,10,"OK"),snprintf(buf,10,"%s!!",buf),strcmp(buf,"OK!!")==0));
     }
 #endif
-
+	/* suggested by Prasoon Saurav */
     EXPECT("21 Evaluation for +,* is left to right",
            (ltr_fun(1)*ltr_fun(2)+ltr_fun(3)*ltr_fun(4),ltr_result==1234));
     if (fail) printf("ltr_result is %d in this case\n",ltr_result);
     ltr_result=0;
+	
     EXPECT("21a Function Arguments are evaluated right to left",
            (gobble_args(0,ltr_fun(1),ltr_fun(2),ltr_fun(3),ltr_fun(4)),ltr_result==4321));
     if (fail) printf("ltr_result is %d in this case\n",ltr_result);
