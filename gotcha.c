@@ -4,12 +4,12 @@
 #include <stddef.h>
 #include <stdarg.h>
 
-#ifndef __CC65__ 
+#ifndef __CC65__
 #define HAVE_FLOAT 1
 #endif
 
-/* 
- Some tests can crash the program. Define -DALLOW_CRASH=1 to enable these 
+/*
+ Some tests can crash the program. Define -DALLOW_CRASH=1 to enable these
 */
 
 #ifndef ALLOW_CRASH
@@ -18,6 +18,7 @@
 
 int count=0;
 int total=0;
+int fail=0;
 
 void expect(const char *info, const char *expr)
 {
@@ -25,7 +26,7 @@ void expect(const char *info, const char *expr)
     fflush(stdout);
     count++;
 }
-#define EXPECT(INFO,EXPR) if (total++,!(EXPR)) expect(INFO,#EXPR)
+#define EXPECT(INFO,EXPR) if (fail=0, total++,!(EXPR)) expect((fail=1,(INFO)),#EXPR)
 
 /* stack check..How can I do this better? */
 ptrdiff_t check_grow(int k, int *p)
@@ -34,6 +35,7 @@ ptrdiff_t check_grow(int k, int *p)
     if (k==0) return &k-p;
     else return check_grow(k-1,p);
 }
+
 #define BITS_PER_INT (sizeof(int)*CHAR_BIT)
 
 int bits_per_int=BITS_PER_INT;
@@ -46,6 +48,9 @@ unsigned ltr_fun(int k)
 {
     ltr_result=ltr_result*10+k;
     return 1;
+}
+void gobble_args(int dummy, ...)
+{
 }
 
 #if ALLOC_CRASH
@@ -101,7 +106,7 @@ int main()
     /* Suggested by jalf */
     EXPECT("10 void* can store function pointers",sizeof(void*)>=sizeof(void(*)()));
     /* execution */
-    EXPECT("11 Detecting how the stack grows is easy",check_grow(5,0)!=0);
+    EXPECT("11 Detecting how the stack grows is easy",check_grow(5,0)!=check_grow(6,0));
     EXPECT("12 the stack grows downwards",check_grow(5,0)<0);
 
     {
@@ -113,7 +118,7 @@ int main()
         /* Suggested by S.Lott */
         int a[2]={0,0};
         int i=0;
-        EXPECT("14 i++ is structly left to right",(i=0,a[i++]=i,a[0]==1));
+        EXPECT("14 i++ is strictly left to right",(i=0,a[i++]=i,a[0]==1));
     }
     {
         struct {
@@ -122,9 +127,9 @@ int main()
         } char_int;
         EXPECT("15 structs are packed",sizeof(char_int)==(sizeof(char)+sizeof(int)));
     }
-    
+
     {
-    	// There is a CERT for it: MEM04-C
+        // There is a CERT for it: MEM04-C
         EXPECT("16 malloc()=NULL means out of memory",(malloc(0)!=NULL));
     }
 
@@ -148,30 +153,35 @@ int main()
     }
 #endif
 
-    EXPECT("21 Evaluation is left to right",
-   		(ltr_fun(1)*ltr_fun(2)*ltr_fun(3)*ltr_fun(4),ltr_result==1234));
-		   
-	{
-	#ifdef __STDC_IEC_559__
-	int STDC_IEC_559_is_defined=1;
-	#else 
-	/* This either means, there is no FP support
-	 *or* the compiler is not C99 enough to define  __STDC_IEC_559__
-	 *or* the FP support is not IEEE compliant. 
-	 */
-	int STDC_IEC_559_is_defined=0;
-	#endif
-    EXPECT("22 floating point is always IEEE",STDC_IEC_559_is_defined);
-	}
-	#if ALLOW_CRASH
-	#if HAVE_FLOAT
-	EXPECT("23 floats can be used in variadics",sum_variadic_floats(3,2.0f,4.0f,8.0f)==14.0f);
-	#endif
-	EXPECT("24 char can be used in variadics",sum_variadic_chars(3,(char)2,(char)4,(char)8)==14);
-	#endif
-	
-	{
-		/* See also: CERT ARR36-C,ARR37-C */
+    EXPECT("21 Evaluation for +,* is left to right",
+           (ltr_fun(1)*ltr_fun(2)+ltr_fun(3)*ltr_fun(4),ltr_result==1234));
+    if (fail) printf("ltr_result is %d in this case\n",ltr_result);
+    ltr_result=0;
+    EXPECT("21a Function Arguments are evaluated right to left",
+           (gobble_args(0,ltr_fun(1),ltr_fun(2),ltr_fun(3),ltr_fun(4)),ltr_result==4321));
+    if (fail) printf("ltr_result is %d in this case\n",ltr_result);
+
+    {
+#ifdef __STDC_IEC_559__
+        int STDC_IEC_559_is_defined=1;
+#else
+        /* This either means, there is no FP support
+         *or* the compiler is not C99 enough to define  __STDC_IEC_559__
+         *or* the FP support is not IEEE compliant.
+         */
+        int STDC_IEC_559_is_defined=0;
+#endif
+        EXPECT("22 floating point is always IEEE",STDC_IEC_559_is_defined);
+    }
+#if ALLOW_CRASH
+#if HAVE_FLOAT
+    EXPECT("23 floats can be used in variadics",sum_variadic_floats(3,2.0f,4.0f,8.0f)==14.0f);
+#endif
+    EXPECT("24 char can be used in variadics",sum_variadic_chars(3,(char)2,(char)4,(char)8)==14);
+#endif
+
+    {
+        /* See also: CERT ARR36-C,ARR37-C */
         struct {
             int int1;
             char c;
@@ -180,7 +190,6 @@ int main()
         ptrdiff_t diff;
         EXPECT("25 pointer arithmetic is well defined",(diff=&var.int2-&var.int1, &var.int1+diff==&var.int2));
     }
-
-     printf("From what I can say with my puny test cases, you are %d%% mainstream\n",100-(100*count)/total);
+    printf("From what I can say with my puny test cases, you are %d%% mainstream\n",100-(100*count)/total);
     return 0;
 }
