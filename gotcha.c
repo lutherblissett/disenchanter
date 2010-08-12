@@ -8,6 +8,17 @@
 #define HAVE_FLOAT 1
 #endif
 
+#if  __STDC_VERSION>=199901L
+#define HAVE_C99 1
+#endif
+
+#if __GNUC__ || HAVE_C99
+#define HAVE_VLA 1
+#endif
+
+#ifdef HAVE_FLOAT
+#include <math.h>
+#endif
 /*
  Some tests can crash the program. Define -DALLOW_CRASH=1 to enable these
 */
@@ -49,11 +60,12 @@ unsigned ltr_fun(int k)
     ltr_result=ltr_result*10+k;
     return 1;
 }
-void gobble_args(int dummy, ...)
+int gobble_args(int dummy, ...)
 {
+    return dummy;
 }
 
-#if ALLOC_CRASH
+#if ALLOW_CRASH
 #if HAVE_FLOAT
 float sum_variadic_floats(unsigned int n, ...)
 {
@@ -129,13 +141,13 @@ int main()
     }
 
     {
-        // There is a CERT for it: MEM04-C
+        /* CERT:MEM04-C */
         EXPECT("16 malloc()=NULL means out of memory",(malloc(0)!=NULL));
     }
 
     /* suggested by David Thornley */
     EXPECT("17 size_t is unsigned int",sizeof(size_t)==sizeof(unsigned int));
-    /* this is true for C99, but not for C90. */
+    /* this is true for C99, but unspec. for C90. */
     EXPECT("18 a%b has the same sign as a",((-10%3)==-1) && ((10%-3)==1));
 
     /* suggested by nos */
@@ -152,12 +164,12 @@ int main()
                (snprintf(buf,10,"OK"),snprintf(buf,10,"%s!!",buf),strcmp(buf,"OK!!")==0));
     }
 #endif
-	/* suggested by Prasoon Saurav */
+    /* suggested by Prasoon Saurav */
     EXPECT("21 Evaluation for +,* is left to right",
            (ltr_fun(1)*ltr_fun(2)+ltr_fun(3)*ltr_fun(4),ltr_result==1234));
     if (fail) printf("ltr_result is %d in this case\n",ltr_result);
     ltr_result=0;
-	
+
     EXPECT("21a Function Arguments are evaluated right to left",
            (gobble_args(0,ltr_fun(1),ltr_fun(2),ltr_fun(3),ltr_fun(4)),ltr_result==4321));
     if (fail) printf("ltr_result is %d in this case\n",ltr_result);
@@ -182,15 +194,37 @@ int main()
 #endif
 
     {
-        /* See also: CERT ARR36-C,ARR37-C */
+        /* CERT:ARR36-C,CERT:ARR37-C */
         struct {
             int int1;
             char c;
             int int2;
         } var;
         ptrdiff_t diff;
-        EXPECT("25 pointer arithmetic is well defined",(diff=&var.int2-&var.int1, &var.int1+diff==&var.int2));
+        EXPECT("25 pointer arithmetic works outside arrays",(diff=&var.int2-&var.int1, &var.int1+diff==&var.int2));
     }
+    {
+        /* This is not just a packing problem: */
+        struct data
+        {
+            char data[17];
+        };
+        struct data p1;
+        struct data p2;
+        ptrdiff_t diff=&p1-&p2;
+        EXPECT("25a pointer arithmetic works outside arrays",(diff=&p1-&p2, &p2+diff==&p1));
+    }
+#if HAVE_VLA
+    {
+        /* This can happen with C99. */
+        int i;
+        EXPECT("26 sizeof() does not evaluate its arguments",(i=10,sizeof(char[((i=20),10)]),i==10));
+    }
+#endif
+#if HAVE_FLOAT
+    /* suggested by dan04. We need netter numbers */
+    EXPECT("27 pow() gives exact results for integer arguments", pow(2,4) == 16);
+#endif
     printf("From what I can say with my puny test cases, you are %d%% mainstream\n",100-(100*count)/total);
     return 0;
 }
