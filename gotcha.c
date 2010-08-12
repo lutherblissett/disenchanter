@@ -2,8 +2,23 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <stddef.h>
+#include <stdarg.h>
+
+#ifndef __CC65__ 
+#define HAVE_FLOAT 1
+#endif
+
+/* 
+ Some tests can crash the program. Define -DALLOW_CRASH=1 to enable these 
+*/
+
+#ifndef ALLOW_CRASH
+#define ALLOW_CRASH 0
+#endif
+
 int count=0;
 int total=0;
+
 void expect(const char *info, const char *expr)
 {
     printf("..%s\n   but '%s' is false.\n",info,expr);
@@ -32,6 +47,32 @@ unsigned ltr_fun(int k)
     ltr_result=ltr_result*10+k;
     return 1;
 }
+
+#if ALLOC_CRASH
+#if HAVE_FLOAT
+float sum_variadic_floats(unsigned int n, ...)
+{
+    float v = 0;
+    va_list ap;
+    va_start(ap, n);
+    while (n--)
+        v += va_arg(ap, float);
+    va_end(ap);
+    return v;
+}
+#endif
+
+char sum_variadic_chars(unsigned int n, ...)
+{
+    char v = 0;
+    va_list ap;
+    va_start(ap, n);
+    while (n--)
+        v += va_arg(ap, char);
+    va_end(ap);
+    return v;
+}
+#endif
 
 int main()
 {
@@ -81,7 +122,9 @@ int main()
         } char_int;
         EXPECT("15 structs are packed",sizeof(char_int)==(sizeof(char)+sizeof(int)));
     }
+    
     {
+    	// There is a CERT for it: MEM04-C
         EXPECT("16 malloc()=NULL means out of memory",(malloc(0)!=NULL));
     }
 
@@ -95,10 +138,10 @@ int main()
     EXPECT("19-2 short<int",sizeof(short)<sizeof(int));
     EXPECT("19-3 int<long",sizeof(int)<sizeof(long));
     EXPECT("20 ptrdiff_t and size_t have the same size",(sizeof(ptrdiff_t)==sizeof(size_t)));
-#if 0
+#if ALLOW_CRASH
     {
         /* suggested by R. */
-        /* this crashed on TC 3.0++, compact. */
+        /* this crashes on TC 3.0++, compact. */
         char buf[10];
         EXPECT("21 You can use snprintf to append a string",
                (snprintf(buf,10,"OK"),snprintf(buf,10,"%s!!",buf),strcmp(buf,"OK!!")==0));
@@ -106,7 +149,7 @@ int main()
 #endif
 
     EXPECT("21 Evaluation is left to right",
-           (ltr_fun(1)*ltr_fun(2)*ltr_fun(3)*ltr_fun(4),ltr_result==1234));
+   		(ltr_fun(1)*ltr_fun(2)*ltr_fun(3)*ltr_fun(4),ltr_result==1234));
 		   
 	{
 	#ifdef __STDC_IEC_559__
@@ -114,12 +157,30 @@ int main()
 	#else 
 	/* This either means, there is no FP support
 	 *or* the compiler is not C99 enough to define  __STDC_IEC_559__
-	 *or* the FP support is not IEEE compliant. */
+	 *or* the FP support is not IEEE compliant. 
+	 */
 	int STDC_IEC_559_is_defined=0;
 	#endif
     EXPECT("22 floating point is always IEEE",STDC_IEC_559_is_defined);
 	}
+	#if ALLOW_CRASH
+	#if HAVE_FLOAT
+	EXPECT("23 floats can be used in variadics",sum_variadic_floats(3,2.0f,4.0f,8.0f)==14.0f);
+	#endif
+	EXPECT("24 char can be used in variadics",sum_variadic_chars(3,(char)2,(char)4,(char)8)==14);
+	#endif
 	
-    printf("From what I can say with my puny test cases, you are %d%% mainstream\n",100-(100*count)/total);
+	{
+		/* See also: CERT ARR36-C,ARR37-C */
+        struct {
+            int int1;
+            char c;
+            int int2;
+        } var;
+        ptrdiff_t diff;
+        EXPECT("25 pointer arithmetic is well defined",(diff=&var.int2-&var.int1, &var.int1+diff==&var.int2));
+    }
+
+     printf("From what I can say with my puny test cases, you are %d%% mainstream\n",100-(100*count)/total);
     return 0;
 }
