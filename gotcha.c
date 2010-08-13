@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdarg.h>
 
-#ifndef __CC65__
+#if !defined(__CC65__) && !defined(SDCC)
 #define HAVE_FLOAT 1
 #endif
 
@@ -34,8 +34,15 @@ int fail=0;
 void expect(const char *info, const char *expr)
 {
     printf("..%s\n   but '%s' is false.\n",info,expr);
-    fflush(stdout);
+    //fflush(stdout);
     count++;
+	#if __CC65__ 
+	if (count % 8 == 0) 
+	{
+		puts("\n-press enter to continue-\n");
+		getchar();
+	}
+	#endif
 }
 #define EXPECT(INFO,EXPR) if (fail=0, total++,!(EXPR)) expect((fail=1,(INFO)),#EXPR)
 
@@ -62,7 +69,7 @@ unsigned ltr_fun(int k)
 }
 int gobble_args(int dummy, ...)
 {
-    return dummy;
+	return dummy;
 }
 
 #if ALLOW_CRASH
@@ -99,8 +106,14 @@ int main()
     EXPECT("01 A-Z is in a block",('Z'-'A')+1==26);
     EXPECT("02 big letters come before small letters",('A'<'a'));
     EXPECT("03 a char is 8 bits",CHAR_BIT==8);
-    EXPECT("04 a char is signed",CHAR_MIN==SCHAR_MIN);
-
+    
+    /* on many x86 platforms, windows, char ist signed. PowerPC & ARM are mostly unsigned . Borland C loves unsigned. */
+    EXPECT("04 char is signed",CHAR_MIN<0);
+    /* I figured that more people assume this, than believing in the signedness of char */
+    EXPECT("04a char starts with 0",CHAR_MIN==0);
+    if (fail) {
+    	printf("--- this means be careful if you use a char as array index!\n");
+    }
     /* integers */
     EXPECT("05 int has the size of pointers",sizeof(int)==sizeof(void*));
     /* not true for Windows-64 */
@@ -155,7 +168,7 @@ int main()
     EXPECT("19-2 short<int",sizeof(short)<sizeof(int));
     EXPECT("19-3 int<long",sizeof(int)<sizeof(long));
     EXPECT("20 ptrdiff_t and size_t have the same size",(sizeof(ptrdiff_t)==sizeof(size_t)));
-#if ALLOW_CRASH
+	#if ALLOW_CRASH
     {
         /* suggested by R. */
         /* this crashes on TC 3.0++, compact. */
@@ -163,35 +176,35 @@ int main()
         EXPECT("21 You can use snprintf to append a string",
                (snprintf(buf,10,"OK"),snprintf(buf,10,"%s!!",buf),strcmp(buf,"OK!!")==0));
     }
-#endif
-    /* suggested by Prasoon Saurav */
+	#endif
+	/* suggested by Prasoon Saurav */
     EXPECT("21 Evaluation for +,* is left to right",
            (ltr_fun(1)*ltr_fun(2)+ltr_fun(3)*ltr_fun(4),ltr_result==1234));
     if (fail) printf("ltr_result is %d in this case\n",ltr_result);
     ltr_result=0;
-
+	
     EXPECT("21a Function Arguments are evaluated right to left",
            (gobble_args(0,ltr_fun(1),ltr_fun(2),ltr_fun(3),ltr_fun(4)),ltr_result==4321));
     if (fail) printf("ltr_result is %d in this case\n",ltr_result);
 
     {
-#ifdef __STDC_IEC_559__
+	#ifdef __STDC_IEC_559__
         int STDC_IEC_559_is_defined=1;
-#else
+	#else
         /* This either means, there is no FP support
          *or* the compiler is not C99 enough to define  __STDC_IEC_559__
          *or* the FP support is not IEEE compliant.
          */
         int STDC_IEC_559_is_defined=0;
-#endif
+	#endif
         EXPECT("22 floating point is always IEEE",STDC_IEC_559_is_defined);
     }
-#if ALLOW_CRASH
-#if HAVE_FLOAT
+	#if ALLOW_CRASH
+	#if HAVE_FLOAT
     EXPECT("23 floats can be used in variadics",sum_variadic_floats(3,2.0f,4.0f,8.0f)==14.0f);
-#endif
+	#endif
     EXPECT("24 char can be used in variadics",sum_variadic_chars(3,(char)2,(char)4,(char)8)==14);
-#endif
+	#endif
 
     {
         /* CERT:ARR36-C,CERT:ARR37-C */
@@ -204,27 +217,35 @@ int main()
         EXPECT("25 pointer arithmetic works outside arrays",(diff=&var.int2-&var.int1, &var.int1+diff==&var.int2));
     }
     {
-        /* This is not just a packing problem: */
-        struct data
-        {
-            char data[17];
-        };
-        struct data p1;
-        struct data p2;
-        ptrdiff_t diff=&p1-&p2;
+		/* This is not just a packing problem: */
+		struct D
+		{
+			char d[17];
+		};
+		struct D p1; 
+		struct D p2; 
+		ptrdiff_t diff=&p1-&p2;
         EXPECT("25a pointer arithmetic works outside arrays",(diff=&p1-&p2, &p2+diff==&p1));
-    }
-#if HAVE_VLA
+	}
+	#if HAVE_VLA
     {
-        /* This can happen with C99. */
-        int i;
-        EXPECT("26 sizeof() does not evaluate its arguments",(i=10,sizeof(char[((i=20),10)]),i==10));
-    }
-#endif
-#if HAVE_FLOAT
+	 /* This can happen with C99. */
+	 int i;
+     EXPECT("26 sizeof() does not evaluate its arguments",(i=10,sizeof(char[((i=20),10)]),i==10));
+	}
+    #endif
+    #if HAVE_FLOAT
     /* suggested by dan04. We need netter numbers */
     EXPECT("27 pow() gives exact results for integer arguments", pow(2,4) == 16);
-#endif
+	#endif
+	{
+	/* CERT:EXP39-C */
+	/* gcc -O2 -fstrict-aliasing cast.c */
+	short a[2*sizeof(int)/sizeof(short)];
+    /* aliasing is only allowes with char */
+	EXPECT("28 We can alias all integer types. After all it's just memory", (a[0]=0,*(int*)a=-1,a[0]!=0));
+	}
+	EXPECT("29 string literals can be compared","ABC"=="ABC");
     printf("From what I can say with my puny test cases, you are %d%% mainstream\n",100-(100*count)/total);
     return 0;
 }
